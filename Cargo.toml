@@ -1,0 +1,14 @@
+#
+
+[package]
+name = "cipher"
+version = "0.1.0"
+edition = "2021"
+
+authors = ["BAD1DEA5 <bad1dea5@dev.lan"]
+
+[dependencies]
+color-eyre = "0.6.2"
+crossterm = "0.27.0"
+ratatui = "0.25.0"
+tui-input = "0.8.0"
