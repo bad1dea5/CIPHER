@@ -2,83 +2,91 @@
 //
 //
 
+use crossterm::event::{Event as CrosstermEvent, EventStream, KeyEvent, KeyEventKind, MouseEvent};
+use futures::{FutureExt, StreamExt};
 use std::{
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
+    io::{Error, ErrorKind},
+    time::Duration
 };
+use tokio::{
+    sync::mpsc,
+    task::JoinHandle,
+    time,
+};
+use crate::app::Result;
 
-use color_eyre::Result;
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
-
-#[derive(Clone, Copy, Debug)]
+//
+//
+//
+#[derive(Debug, Clone, Copy)]
 pub enum Event {
     Tick,
     Key(KeyEvent),
     Mouse(MouseEvent),
-    Resize(u16, u16),
+    Resize(u16, u16)
 }
 
-#[derive(Debug)]
+//
+//
+//
+#[allow(dead_code)]
 pub struct EventHandler {
-    #[allow(dead_code)]
-    sender: mpsc::Sender<Event>,
-    receiver: mpsc::Receiver<Event>,
-    #[allow(dead_code)]
-    handler: thread::JoinHandle<()>,
+    sender: mpsc::UnboundedSender<Event>,
+    receiver: mpsc::UnboundedReceiver<Event>,
+    worker: JoinHandle<()>,
 }
 
+//
+//
+//
 impl EventHandler {
-    pub fn new(tick_rate: u64) -> Self {
+    pub fn new(tick_rate: u64) -> Result<Self> {
         let tick_rate = Duration::from_millis(tick_rate);
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let emit = sender.clone();
+        let worker = tokio::spawn(async move {
+            let mut stream = EventStream::new();
+            let mut tick = time::interval(tick_rate);
 
-        let handler = {
-            let sender = sender.clone();
-            thread::spawn(move || {
-                let mut last_tick = Instant::now();
-                loop {
-                    let timeout = tick_rate
-                        .checked_sub(last_tick.elapsed())
-                        .unwrap_or(tick_rate);
+            loop {
+                let tick_delay = tick.tick();
+                let event = stream.next().fuse();
 
-                    if event::poll(timeout).expect("unable to poll for event") {
-                        match event::read().expect("unable to read event") {
-                            CrosstermEvent::Key(e) => {
-                                if e.kind == event::KeyEventKind::Press {
-                                    sender.send(Event::Key(e))
-                                } else {
-                                    Ok(())
+                tokio::select! {
+                    Some(Ok(evt)) = event => {
+                        match evt {
+                            CrosstermEvent::Key(key) => {
+                                if key.kind == KeyEventKind::Press {
+                                    emit.send(Event::Key(key)).unwrap()
                                 }
                             }
-                            CrosstermEvent::Mouse(e) => {
-                                sender.send(Event::Mouse(e))
+                            CrosstermEvent::Mouse(mouse) => {
+                                emit.send(Event::Mouse(mouse)).unwrap()
                             }
-                            CrosstermEvent::Resize(w, h) => {
-                                sender.send(Event::Resize(w, h))
+                            CrosstermEvent::Resize(x, y) => {
+                                emit.send(Event::Resize(x, y)).unwrap()
                             }
-                            _ => unimplemented!("{}", 1),
+                            CrosstermEvent::Paste(_) => {
+                            }
+                            CrosstermEvent::FocusLost => {
+                            }
+                            CrosstermEvent::FocusGained => {
+                            }
                         }
-                        .expect("failed to send terminal event")
                     }
-
-                    if last_tick.elapsed() >= tick_rate {
-                        sender
-                            .send(Event::Tick)
-                            .expect("failed to send tick event");
-                        last_tick = Instant::now();
+                    _ = tick_delay => {
+                        emit.send(Event::Tick).unwrap();
                     }
                 }
-            })
-        };
-        Self {
-            sender,
-            receiver,
-            handler,
-        }
+            }
+        });
+
+        Ok(Self { sender, receiver, worker })
     }
-    
-    pub fn next(&self) -> Result<Event> {
-        Ok(self.receiver.recv()?)
+
+    pub async fn next(&mut self) -> Result<Event> {
+        self.receiver.recv().await.ok_or(
+            Box::new(Error::new(ErrorKind::Other, "An io error occurred"))
+        )
     }
 }

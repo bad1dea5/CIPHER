@@ -15,40 +15,32 @@ pub struct Version {
 
 impl Default for Version {
     fn default() -> Self {
-        Version {
+        Self {
             major: (VERSION >> 48) as u16,
             minor: (VERSION >> 32) as u16,
-            patch: (VERSION >> 16) as u16
+            patch: (VERSION >> 16) as u16,
         }
     }
 }
 
 impl Version {
-    pub fn new() -> Version {
-        Version {
-            major: (VERSION >> 48) as u16,
-            minor: (VERSION >> 32) as u16,
-            patch: (VERSION >> 16) as u16
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn show(&self) -> String {
-        let version: Vec<u16> = vec![self.major, self.minor, self.patch];
-
-        fn inner<D, I>(array: I) -> String
+    pub fn as_string(self) -> String {
+        fn inner<D, I>(version: I) -> String
         where
             D: Display,
             I: IntoIterator<Item=D>
         {
-            let mut iterator = array.into_iter();
-            let head = match iterator.next() {
+            let mut iterator = version.into_iter();
+            let begin = match iterator.next() {
                 Some(r) => format!("{r}"),
                 None => String::new()
             };
-
-            iterator.fold(head, |acc, x| format!("{acc}.{x}"))
+            iterator.fold(begin, |a, x| format!("{a}.{x}"))
         }
-        
-        inner(version)
+        inner(vec![self.major, self.minor, self.patch])
     }
 }

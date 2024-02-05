@@ -2,29 +2,60 @@
 //
 //
 
-use crate::version::Version;
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use std::{
+    error::Error,
+    result::Result as IoResult,
+};
 
-#[derive(Debug, Default)]
+pub type Result<T> = IoResult<T, Box<dyn Error>>;
+
+//
+//
+//
+#[derive(Debug, Default, Clone, Copy)]
+pub struct AppContext {
+    pub index: usize,
+}
+
+//
+//
+//
+#[allow(dead_code)]
+#[derive(Debug)]
 pub struct App<'a> {
-    pub name: &'a str,
-    pub version: Version,
+    context: AppContext,
+    name: &'a str,
     pub is_running: bool,
 }
 
+//
+//
+//
 impl<'a> App<'a> {
-    pub fn new(name: &'a str) -> Self {
-        Self {
-            name: name,
-            version: Version::new(),
-            is_running: true,
+    pub fn new(name: &'a str) -> Result<Self> {
+        Ok(Self {
+            context: AppContext::default(),
+            name,
+            is_running: true
+        })
+    }
+
+    pub async fn handle_key_events(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.exit();
+            }
+            _ => {}
         }
+        Ok(())
     }
 
-    pub fn quit(&mut self) {
-        self.is_running = false;
+    pub async fn handle_mouse_events(&self, _: MouseEvent) -> Result<()> {
+        Ok(())
     }
 
-    pub fn version(&self) -> String {
-        self.version.show()
+    pub fn exit(&mut self) {
+        self.is_running = false
     }
 }

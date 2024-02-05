@@ -4,41 +4,43 @@
 
 mod app;
 mod event;
-mod ui;
 mod tui;
-mod update;
+mod ui;
 mod version;
 
-use color_eyre::Result;
+use event::Event;
 use ratatui::{
     backend::CrosstermBackend,
     Terminal
 };
+use crate::{
+    app::{App, Result},
+    tui::Tui,
+};
 
-use app::App;
-use event::{Event, EventHandler};
-use tui::Tui;
-use update::update;
-
-fn main() -> Result<()> {
-    let mut app = App::new("cipher");
-
-    let backend = CrosstermBackend::new(std::io::stderr());
-    let terminal = Terminal::new(backend)?;
-    let events = EventHandler::new(250);
-    let mut tui = Tui::new(terminal, events);
+#[tokio::main]
+async fn main() -> Result<()> {
+    let mut app = App::new("cipher")?;
+    let terminal = Terminal::new(
+        CrosstermBackend::new(std::io::stdout())
+    )?;
+    let mut tui = Tui::new(terminal)?;
 
     tui.enter()?;
 
     while app.is_running {
-        tui.draw(&mut app)?;
+        tui.draw()?;
 
-        match tui.events.next()? {
-            Event::Tick => {},
-            Event::Key(key_event) => update(&mut app, key_event),
-            Event::Mouse(_) => {},
+        match tui.events.next().await? {
+            Event::Key(key) => {
+                app.handle_key_events(key).await?
+            }
+            Event::Mouse(mouse) => {
+                app.handle_mouse_events(mouse).await?
+            }
             Event::Resize(_, _) => {}
-        };
+            Event::Tick => {}
+        }
     }
 
     tui.exit()?;

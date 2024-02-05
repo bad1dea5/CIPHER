@@ -2,71 +2,101 @@
 //
 //
 
-use std::{io, panic};
-
-use color_eyre::Result;
+use color_eyre::{
+    config::HookBuilder,
+    eyre::Context,
+};
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
-    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
 };
-
-pub type CrosstermTerminal = 
-    ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stderr>>;
-
+use ratatui::{
+    backend::Backend,
+    Terminal,
+};
 use crate::{
-    app::App,
+    app::Result,
     event::EventHandler,
-    ui
+    ui::Ui,
 };
 
-pub struct Tui {
-    terminal: CrosstermTerminal,
+//
+//
+//
+pub struct Tui<B>
+where
+    B: Backend
+{
+    terminal: Terminal<B>,
     pub events: EventHandler,
 }
 
-impl Tui {
-    pub fn new(terminal: CrosstermTerminal, events: EventHandler) -> Self {
-        Self { terminal, events }
+//
+//
+//
+impl<B> Tui<B>
+where
+    B: Backend + Send + Sync + 'static
+{
+    pub fn new(terminal: Terminal<B>) -> Result<Self> {
+        Ok(Self { 
+            terminal,
+            events: EventHandler::new(250)?
+        })
     }
 
-    pub fn enter(&mut self) -> Result<()> {
-        terminal::enable_raw_mode()?;
-        crossterm::execute!(
-            io::stderr(),
-            EnterAlternateScreen,
-            EnableMouseCapture
-        )?;
+    pub fn enter(&self) -> Result<()> {
+        self.install_hooks()?;
 
-        let panic_hook = panic::take_hook();
-        panic::set_hook(Box::new(move |panic| {
-            Self::reset().expect("failed to reset the terminal");
-            panic_hook(panic);
+        crossterm::terminal::enable_raw_mode()
+            .context("Failed to enable raw mode")?;
+        std::io::stdout()
+            .execute(EnterAlternateScreen)
+            .wrap_err("Failed to EnterAlternateScreen")?;
+
+        Ok(())
+    }
+
+    pub fn exit(&self) -> Result<()> {
+        crossterm::terminal::disable_raw_mode()
+            .context("Failed to disable raw mode")?;
+        std::io::stdout()
+            .execute(LeaveAlternateScreen)
+            .wrap_err("Failed to LeaveAlternateScreen")?;
+
+        Ok(())
+    }
+
+    pub fn draw(&mut self) -> Result<()> {
+        self.terminal.draw(|f| f.render_widget(Ui::new(), f.size()))?;
+        Ok(())
+    }
+
+    fn install_hooks(&self) -> Result<()> {
+
+        let (panic, error) = HookBuilder::default().into_hooks();
+        let panic = panic.into_panic_hook();
+        let error = error.into_eyre_hook();
+
+        color_eyre::eyre::set_hook(Box::new(move |e| {
+            let _ = crossterm::terminal::disable_raw_mode()
+                .context("Failed to disable raw mode");
+            let _ = std::io::stdout()
+                .execute(LeaveAlternateScreen)
+                .wrap_err("Failed to LeaveAlternateScreen");
+            error(e)
+        }))?;
+
+        std::panic::set_hook(Box::new(move |info| {
+            // hack
+            let _ = crossterm::terminal::disable_raw_mode()
+                .context("Failed to disable raw mode");
+            let _ = std::io::stdout()
+                .execute(LeaveAlternateScreen)
+                .wrap_err("Failed to LeaveAlternateScreen");
+            panic(info)
         }));
 
-        self.terminal.hide_cursor()?;
-        self.terminal.clear()?;
-
-        Ok(())
-    }
-
-    pub fn draw(&mut self, app: &mut App) -> Result<()> {
-        self.terminal.draw(|frame| ui::render(app, frame))?;
-        Ok(())
-    }
-
-    fn reset() -> Result<()> {
-        terminal::disable_raw_mode()?;
-        crossterm::execute!(
-            io::stderr(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
-        )?;
-        Ok(())
-    }
-
-    pub fn exit(&mut self) -> Result<()> {
-        Self::reset()?;
-        self.terminal.show_cursor()?;
         Ok(())
     }
 }
