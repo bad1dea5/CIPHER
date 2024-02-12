@@ -15,7 +15,7 @@ use ratatui::{
     Terminal,
 };
 use crate::{
-    app::Result,
+    app::{App, Result},
     event::EventHandler,
     ui::Ui,
 };
@@ -67,8 +67,8 @@ where
         Ok(())
     }
 
-    pub fn draw(&mut self) -> Result<()> {
-        self.terminal.draw(|f| f.render_widget(Ui::new(), f.size()))?;
+    pub fn draw<'a>(&mut self, app: &'a mut App) -> Result<()> {
+        self.terminal.draw(|f| f.render_widget(Ui::new(app), f.size()))?;
         Ok(())
     }
 

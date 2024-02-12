@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     tui.enter()?;
 
     while app.is_running {
-        tui.draw()?;
+        tui.draw(&mut app)?;
 
         match tui.events.next().await? {
             Event::Key(key) => {

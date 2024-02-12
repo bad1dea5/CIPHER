@@ -6,7 +6,7 @@ use std::fmt::Display;
 
 static VERSION: u64 = 0x0000_0001_0000_0000;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Version {
     major: u16,
     minor: u16,

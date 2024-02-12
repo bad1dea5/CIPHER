@@ -7,6 +7,7 @@ use std::{
     error::Error,
     result::Result as IoResult,
 };
+use crate::version::Version;
 
 pub type Result<T> = IoResult<T, Box<dyn Error>>;
 
@@ -24,9 +25,10 @@ pub struct AppContext {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct App<'a> {
-    context: AppContext,
-    name: &'a str,
+    pub context: AppContext,
+    pub name: &'a str,
     pub is_running: bool,
+    version: Version,
 }
 
 //
@@ -37,7 +39,8 @@ impl<'a> App<'a> {
         Ok(Self {
             context: AppContext::default(),
             name,
-            is_running: true
+            is_running: true,
+            version: Version::default(),
         })
     }
 
@@ -57,5 +60,9 @@ impl<'a> App<'a> {
 
     pub fn exit(&mut self) {
         self.is_running = false
+    }
+
+    pub fn version(&mut self) -> Version {
+        self.version
     }
 }
